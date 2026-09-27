@@ -20,7 +20,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { result, alertSent, alertType, alertError } = await checkWebsite(urlParam || undefined);
+    const sendEmailParam = request.nextUrl.searchParams.get('sendEmail');
+    const allowEmail = sendEmailParam !== null ? sendEmailParam !== 'false' : true;
+
+    const { result, alertSent, alertType, alertError } = await checkWebsite(
+      urlParam || undefined,
+      allowEmail
+    );
     const state = getMonitorState();
 
     return NextResponse.json({

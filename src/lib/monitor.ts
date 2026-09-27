@@ -5,7 +5,8 @@ import { recordCheckResult } from './store';
 const TIMEOUT_MS = 15000; // 15 seconds timeout
 
 export async function checkWebsite(
-  url: string = process.env.TARGET_URL || DEFAULT_TARGET_URL
+  url: string = process.env.TARGET_URL || DEFAULT_TARGET_URL,
+  allowEmail: boolean = true
 ): Promise<{
   result: CheckResult;
   alertSent: boolean;
@@ -85,7 +86,7 @@ export async function checkWebsite(
   let alertSent = false;
   let alertError: string | undefined;
 
-  if (shouldSendAlert) {
+  if (shouldSendAlert && allowEmail) {
     if (alertType === 'DOWN') {
       const emailResult = await sendDowntimeAlert(result);
       alertSent = emailResult.success;

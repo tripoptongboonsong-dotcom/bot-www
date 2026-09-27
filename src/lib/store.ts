@@ -18,6 +18,7 @@ const DEFAULT_STATE: MonitorState = {
   totalChecks: 0,
   totalDownIncidents: 0,
   averageLatencyMs: 0,
+  isEmailAlertEnabled: true,
 };
 
 export function getMonitorState(): MonitorState {
@@ -25,6 +26,12 @@ export function getMonitorState(): MonitorState {
     global.__MONITOR_STATE__ = { ...DEFAULT_STATE };
   }
   return global.__MONITOR_STATE__;
+}
+
+export function setEmailAlertEnabled(enabled: boolean): boolean {
+  const state = getMonitorState();
+  state.isEmailAlertEnabled = enabled;
+  return state.isEmailAlertEnabled;
 }
 
 export function recordCheckResult(result: CheckResult): {
@@ -64,7 +71,7 @@ export function recordCheckResult(result: CheckResult): {
       state.totalDownIncidents += 1;
       state.lastDownTimestamp = result.timestamp;
       state.lastDownThaiTime = result.thaiTime;
-      shouldSendAlert = true;
+      shouldSendAlert = state.isEmailAlertEnabled !== false;
       alertType = 'DOWN';
       state.lastAlertSentAt = result.timestamp;
     } else {
@@ -76,7 +83,7 @@ export function recordCheckResult(result: CheckResult): {
       const cooldownMs = 30 * 60 * 1000; // 30 minutes reminder
 
       if (now - lastAlertTime >= cooldownMs) {
-        shouldSendAlert = true;
+        shouldSendAlert = state.isEmailAlertEnabled !== false;
         alertType = 'DOWN';
         state.lastAlertSentAt = result.timestamp;
       }
@@ -85,7 +92,7 @@ export function recordCheckResult(result: CheckResult): {
     state.consecutiveFailures = 0;
     if (previousStatus === 'DOWN') {
       // Recovered! Send recovery notification
-      shouldSendAlert = true;
+      shouldSendAlert = state.isEmailAlertEnabled !== false;
       alertType = 'RECOVERY';
     }
     state.currentStatus = 'UP';

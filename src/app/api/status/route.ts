@@ -23,7 +23,23 @@ export async function GET() {
   });
 }
 
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    if (typeof body.isEmailAlertEnabled === 'boolean') {
+      const { setEmailAlertEnabled } = await import('@/lib/store');
+      setEmailAlertEnabled(body.isEmailAlertEnabled);
+      return NextResponse.json({ success: true, isEmailAlertEnabled: body.isEmailAlertEnabled });
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ success: false, error: msg }, { status: 400 });
+  }
+  return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
+}
+
 export async function DELETE() {
   resetMonitorHistory();
   return NextResponse.json({ success: true, message: 'History cleared' });
 }
+

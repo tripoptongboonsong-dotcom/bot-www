@@ -22,4 +22,5 @@ export interface MonitorState {
   totalChecks: number;
   totalDownIncidents: number;
   averageLatencyMs: number;
+  isEmailAlertEnabled?: boolean;
 }

@@ -49,6 +49,7 @@ export default function Dashboard() {
   const [countdown, setCountdown] = useState(120);
   const [isAutoCheckActive, setIsAutoCheckActive] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isEmailAlertEnabled, setIsEmailAlertEnabled] = useState(true);
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailFeedback, setTestEmailFeedback] = useState<{
     type: 'success' | 'error';
@@ -58,6 +59,22 @@ export default function Dashboard() {
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Toggle Email Alert ON/OFF
+  const toggleEmailAlert = async () => {
+    const nextVal = !isEmailAlertEnabled;
+    setIsEmailAlertEnabled(nextVal);
+    try {
+      localStorage.setItem('cgd_email_alerts_enabled', String(nextVal));
+      await fetch('/api/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isEmailAlertEnabled: nextVal }),
+      });
+    } catch (err) {
+      console.error('Failed to sync email alert status:', err);
+    }
+  };
 
   // Play audio notification on alert
   const playAlertSound = useCallback(() => {
@@ -151,8 +168,8 @@ export default function Dashboard() {
             : clientLatency,
         }));
       } else {
-        // หากเน็ตในไทยเชื่อมต่อไม่ได้ (เว็บล่มจริง) ให้สั่ง Vercel บันทึกและส่งอีเมลแจ้งเตือน
-        const res = await fetch('/api/check');
+        // หากเน็ตในไทยเชื่อมต่อไม่ได้ (เว็บล่มจริง) ให้สั่ง Vercel บันทึกและส่งอีเมลแจ้งเตือน (ถ้าเปิดระบบส่งอีเมลไว้)
+        const res = await fetch(`/api/check?sendEmail=${isEmailAlertEnabled}`);
         const data = await res.json();
 
         if (data.success && data.result) {
@@ -166,10 +183,14 @@ export default function Dashboard() {
       setIsChecking(false);
       setCountdown(config.intervalSeconds || 120);
     }
-  }, [config.intervalSeconds, config.targetUrl, fetchStatus, playAlertSound]);
+  }, [config.intervalSeconds, config.targetUrl, fetchStatus, isEmailAlertEnabled, playAlertSound]);
 
   // Initial load
   useEffect(() => {
+    const savedEmailPref = localStorage.getItem('cgd_email_alerts_enabled');
+    if (savedEmailPref !== null) {
+      setIsEmailAlertEnabled(savedEmailPref === 'true');
+    }
     fetchStatus();
     // Do initial check on load if no checks yet
     performCheck();
@@ -267,6 +288,21 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <button
+              onClick={toggleEmailAlert}
+              title={isEmailAlertEnabled ? 'คลิกเพื่อปิดการส่งอีเมลชั่วคราว' : 'คลิกเพื่อเปิดการส่งอีเมล'}
+              className={`p-2 rounded-lg border text-sm flex items-center gap-1.5 transition-colors ${
+                isEmailAlertEnabled
+                  ? 'border-emerald-700/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50'
+                  : 'border-slate-800 bg-slate-900 text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <Mail className={`w-4 h-4 ${isEmailAlertEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span className="hidden sm:inline text-xs font-medium">
+                อีเมล: {isEmailAlertEnabled ? 'เปิดอยู่' : 'ปิดชั่วคราว'}
+              </span>
+            </button>
+
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               title={soundEnabled ? 'ปิดเสียงแจ้งเตือน' : 'เปิดเสียงแจ้งเตือน'}
@@ -533,22 +569,56 @@ export default function Dashboard() {
         </section>
 
         {/* Email Alert Setup & Testing Card */}
-        <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
+        <section className={`bg-slate-900/90 border rounded-2xl p-6 transition-colors ${
+          isEmailAlertEnabled ? 'border-slate-800' : 'border-amber-900/40 bg-slate-900/60'
+        }`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
+              <div className={`p-2.5 rounded-xl border transition-colors ${
+                isEmailAlertEnabled 
+                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
+                  : 'bg-slate-800 text-slate-500 border-slate-700'
+              }`}>
                 <Bell className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">ระบบส่งอีเมลแจ้งเตือนเมื่อเว็บล่ม</h3>
-                <p className="text-xs text-slate-400">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">ระบบส่งอีเมลแจ้งเตือนเมื่อเว็บล่ม</h3>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                    isEmailAlertEnabled
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
+                    {isEmailAlertEnabled ? '🟢 เปิดใช้งานอยู่' : '⚪ ปิดชั่วคราว'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
                   ส่งไปยัง:{' '}
                   <strong className="text-slate-200">{config.alertEmail}</strong>
+                  {!isEmailAlertEnabled && (
+                    <span className="text-amber-400 ml-2 font-medium">(ระงับการส่งอีเมลไว้ชั่วคราว)</span>
+                  )}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Email On/Off Toggle Button */}
+              <button
+                onClick={toggleEmailAlert}
+                title={isEmailAlertEnabled ? 'กดเพื่อปิดการส่งอีเมลชั่วคราว' : 'กดเพื่อเปิดการส่งอีเมล'}
+                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2.5 border transition-all ${
+                  isEmailAlertEnabled
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 shadow-sm shadow-emerald-500/10'
+                    : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors ${isEmailAlertEnabled ? 'bg-emerald-500' : 'bg-slate-600'} flex items-center`}>
+                  <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform ${isEmailAlertEnabled ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                </div>
+                <span>{isEmailAlertEnabled ? 'เปิดส่งอีเมล' : 'ปิดส่งอีเมล'}</span>
+              </button>
+
               <button
                 onClick={handleTestEmail}
                 disabled={testEmailLoading}
