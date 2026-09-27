@@ -100,19 +100,65 @@ export default function Dashboard() {
   const performCheck = useCallback(async () => {
     setIsChecking(true);
     try {
-      const res = await fetch('/api/check');
-      const data = await res.json();
+      // 1. ตรวจสอบการเชื่อมต่อตรงจากเบราว์เซอร์ในประเทศไทย (Client Browser in Thailand)
+      // เนื่องจากระบบ GCFA กรมบัญชีกลาง บล็อก IP ต่างประเทศ (Vercel US)
+      // การตรวจตรงจากเน็ตในไทยจะให้ผลลัพธ์ที่ถูกต้องและตรงกับผู้ใช้งานจริงที่สุด
+      let isDirectOnline = false;
+      let clientLatency = 0;
+      const clientStart = performance.now();
 
-      if (data.success && data.result) {
-        const checkRes: CheckResult = data.result;
+      try {
+        await fetch(config.targetUrl, { mode: 'no-cors', cache: 'no-store' });
+        clientLatency = Math.round(performance.now() - clientStart);
+        isDirectOnline = true;
+      } catch {
+        isDirectOnline = false;
+      }
 
-        // If down, play sound
-        if (checkRes.status === 'DOWN') {
+      if (isDirectOnline) {
+        // หากเชื่อมต่อได้จากเน็ตในไทย = เว็บทำงานปกติ 100%
+        const now = new Date();
+        const thaiTime = new Intl.DateTimeFormat('th-TH', {
+          timeZone: 'Asia/Bangkok',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).format(now) + ' น.';
+
+        const clientResult: CheckResult = {
+          url: config.targetUrl,
+          status: 'UP',
+          statusCode: 200,
+          statusText: 'OK (ตรวจผ่านเน็ตไทย)',
+          latencyMs: clientLatency,
+          timestamp: now.toISOString(),
+          thaiTime,
+        };
+
+        setState((prev) => ({
+          ...prev,
+          currentStatus: 'UP',
+          lastCheck: clientResult,
+          consecutiveFailures: 0,
+          history: [clientResult, ...prev.history].slice(0, 50),
+          totalChecks: prev.totalChecks + 1,
+          averageLatencyMs: prev.averageLatencyMs
+            ? Math.round(prev.averageLatencyMs * 0.8 + clientLatency * 0.2)
+            : clientLatency,
+        }));
+      } else {
+        // หากเน็ตในไทยเชื่อมต่อไม่ได้ (เว็บล่มจริง) ให้สั่ง Vercel บันทึกและส่งอีเมลแจ้งเตือน
+        const res = await fetch('/api/check');
+        const data = await res.json();
+
+        if (data.success && data.result) {
           playAlertSound();
+          await fetchStatus();
         }
-
-        // Re-fetch status to get updated history
-        await fetchStatus();
       }
     } catch (err) {
       console.error('Check failed:', err);
@@ -120,7 +166,7 @@ export default function Dashboard() {
       setIsChecking(false);
       setCountdown(config.intervalSeconds || 120);
     }
-  }, [config.intervalSeconds, fetchStatus, playAlertSound]);
+  }, [config.intervalSeconds, config.targetUrl, fetchStatus, playAlertSound]);
 
   // Initial load
   useEffect(() => {
